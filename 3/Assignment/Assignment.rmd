@@ -12,11 +12,7 @@ library(tidyverse)
 ```
 
 ## Data Set
-For this assignment we are looking at historical from NYPD. Specifically every shooting incident since 2006. 
-Jurisdiction code is not 0 in only 3954 rows, 54 of which are 1 and 3900 are 2.
-Location description is only set in 10004 shootings.
-Perpetrator age group isn't known in 8295 rows, sex in 8261, and race in 8261.
-All other data exists in the 23585 rows.
+For this assignment we are looking at historical from NYPD. Specifically every shooting incident since 2006. Jurisdiction code is not 0 in only 3954 rows, 54 of which are 1 and 3900 are 2. This data is likely irrelevant to analysis and can be dropped given the minimal variation. Location description is only set in 10004 shootings. This was describing housing types primarily. Since this is roughly half the records, we'll consider the rest as unknowns. Perpetrator age group isn't known in 8295 rows, sex in 8261, and race in 8261. It's easier to identify sex and race than a specific age range, so the slight variation is not concerning. The perpetrator information would only be known on conviction so the high number of empty values is also unconcerning and should just be treated as unknowns. All other data exists in the 23585 rows. The location is replicated 3 times and could be reduced to a single lat/lon pair.
 
 ```{r importData}
 url_in <-"https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
