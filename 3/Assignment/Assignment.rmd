@@ -1,0 +1,18 @@
+---
+title: "Week 3 Assignment"
+author: "Erin Chapman"
+date: "1/16/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Set
+For this assignment we are looking at historical from NYPD. Specifically every shooting incident since 2006.
+<https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD>
+
+```{r session, echo=FALSE}
+sessionInfo()
+```
