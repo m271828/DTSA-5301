@@ -7,11 +7,26 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+install.packages("tidyverse")
+library(tidyverse)
 ```
 
 ## Data Set
-For this assignment we are looking at historical from NYPD. Specifically every shooting incident since 2006.
-<https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD>
+For this assignment we are looking at historical from NYPD. Specifically every shooting incident since 2006. 
+Jurisdiction code is not 0 in only 3954 rows, 54 of which are 1 and 3900 are 2.
+Location description is only set in 10004 shootings.
+Perpetrator age group isn't known in 8295 rows, sex in 8261, and race in 8261.
+All other data exists in the 23585 rows.
+
+```{r importData}
+url_in <-"https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+csv_data <- read.csv(url_in)
+summary(csv_data)
+csv_data$OCCUR_DATE <- lubridate::mdy(csv_data$OCCUR_DATE)
+csv_data$OCCUR_TIME <- hms::hms(lubridate::hms(csv_data$OCCUR_TIME))
+csv_data$STATISTICAL_MURDER_FLAG <- as.logical(csv_data$STATISTICAL_MURDER_FLAG)
+summary(csv_data)
+```
 
 ```{r session, echo=FALSE}
 sessionInfo()
