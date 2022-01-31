@@ -40,13 +40,19 @@ Now instead of having OCCUR_DATE be a column, I'd like to make a row for each mo
 1. For each Boro, count how many incidents occurred in a year
 
 ```{r MassageData, echo = TRUE}
-csv_data <- add_column(csv_data, tibble(MONTH = lubridate::month(csv_data$OCCUR_DATE), YEAR = lubridate::year(csv_data$OCCUR_DATE)))
-csv_data <- select(csv_data, -c(OCCUR_DATE))
+csv_data <- add_column(csv_data, tibble(MONTH = lubridate::month(csv_data$OCCUR_DATE), YEAR = lubridate::year(csv_data$OCCUR_DATE))) %>%select(-c(OCCUR_DATE))
 
-p_monthly_incidents <- csv_data %>% count(BORO, PRECINCT, MONTH, YEAR)
-p_yearly_incidents <- csv_data %>% count(BORO, PRECINCT, YEAR)
-b_monthly_incidents <- csv_data %>% count(BORO, Month, Year)
-b_yearly_incidents <- csv_data %>% count(BORO, Year)
+p_monthly_incidents <- tibble(BORO = csv_data$BORO, PRECINCT = csv_data$PRECINCT, DATE = lubridate::make_date(csv_data$YEAR, csv_data$MONTH))
+p_monthly_incidents <- p_monthly_incidents %>% count(BORO, PRECINCT, DATE) %>% rename(INCIDENTS = n)
+
+p_yearly_incidents <- tibble(BORO = csv_data$BORO, PRECINCT = csv_data$PRECINCT, YEAR = csv_data$YEAR)
+p_yearly_incidents <- p_yearly_incidents %>% count(BORO, PRECINCT, YEAR) %>% rename(INCIDENTS = n)
+
+b_monthly_incidents <- tibble(BORO = csv_data$BORO, DATE = lubridate::make_date(csv_data$YEAR, csv_data$MONTH))
+b_monthly_incidents <- b_monthly_incidents %>% count(BORO, DATE) %>% rename(INCIDENTS = n)
+
+b_yearly_incidents <- tibble(BORO = csv_data$BORO, YEAR = csv_data$YEAR)
+b_yearly_incidents <- b_yearly_incidents %>% count(BORO, YEAR) %>% rename(INCIDENTS = n)
 
 print(p_monthly_incidents, max = 5)
 print(p_yearly_incidents, max = 5)
@@ -59,7 +65,31 @@ You can see from the sample lines that it's an easier way view the data instead 
 ## Step 3: Visualizations
 Before getting into charts, I'd like to do some quick summary math that will help with interpreting the graph and set expectations for what I'll see. These will be very quick statistics: mean, median, standard deviation and variance. I want to see them two different ways for each data frame, looking at variance within precinct or boro over time and then across the entire data frame.
 
-2 visualizations and some analysis
+```{r graphs, echo = FALSE}
+ggplot(p_monthly_incidents, aes(x=DATE, y=INCIDENTS)) + geom_point(aes(color = factor(PRECINCT))) + labs(title = "Incidents per Precinct by Month")
+
+ggplot(b_monthly_incidents, aes(x=DATE, y=INCIDENTS)) + geom_point(aes(color = factor(BORO))) + labs(title = "Incidents per Boro by Month")
+
+ggplot(p_yearly_incidents, aes(x=YEAR, y = INCIDENTS)) + geom_point(aes(color = factor(PRECINCT))) + labs(title = "Incidents per Precinct by Year")
+
+ggplot(b_yearly_incidents, aes(x=YEAR, y = INCIDENTS)) + geom_point(aes(color = factor(BORO))) + labs(title = "Incidents per Boro by Year")
+```
+The immediate impression is looking at incidents per precinct per month is not a good visualization. The data is way too dense to fit on a printed page in a way that the data points are visually distinct, which also means it won't present well. So while this data is useful potentially for analysis, it is not useful for telling the viewer a story because they're just looking at a giant blob of color with 123 data points at each date mark.
+
+Bringing it up a level to look at incidents per boro per month is slightly better. You can see that Brooklyn has more incidents for example, but we haven't taken populations into account yet. The data points in close linear vicinity also significantly overlap so while you can see a general trend over time, you can't see anything useful within a specific year for a trend. Again, I'd mark this data as useful for analysis, but not for visualization. We still need data that's less dense for someone listening to a presentation to look at and get the point.
+
+Let's take a look at per year since that will have significantly fewer x-axis points. Per precinct strikes me as a brightly colored bar graph with a few outlier points. Again, the number of variables (123 precincts) is providing too much visual clutter to see useful information. When we look at boro, now we see something useful. For each data point, you can see a distinct mark. The boros are visually separable as are the points in time. This is the kind of graph we would want to use in a presentation to show raw data.
+
+There's a few different ways we can add visual information to this graph to add information for the viewer. We could simply draw linear lines between each point so the trend is more visible. A better step could be to find the best fit equation for each boro and show that. On top of that you could add the regression for all of the boros added together and look at how each boro varies from the average regression. The primary reason it doesn't make sense to look at variance against the average right now is we haven't taken population in to account. Brooklyn visually has a significantly higher incident rate, but how does that compare per capita? We would have to go back and find historical population data to make that type of analysis useful. Finding it by year would definitely be possible, by month might be difficult because we're looking at fairly fine grained data. For now, let's just compute the regression line for each boro and add it to the graph to get a better visual comparison of variance in incidents over time.
+
+```{r plotAnalysis, echo=FALSE}
+options(warn=-1)
+ggplot(b_yearly_incidents, aes(x=YEAR, y = INCIDENTS, color = BORO)) +
+    geom_point() + labs(title = "Incidents per Boro by Year") +
+    geom_smooth(method = "lm", formula = y ~ x +poly(x,4))
+options(warn=1)
+```
+
 ```{r session, echo=FALSE}
 sessionInfo()
 ```
