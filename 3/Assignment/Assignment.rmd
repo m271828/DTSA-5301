@@ -1,6 +1,6 @@
 ---
 title: "Week 3 Assignment"
-author: "Erin Chapman"
+author: "Analysis of Shooting Incidents"
 date: "1/16/2022"
 output: pdf_document
 ---
@@ -11,85 +11,161 @@ install.packages("tidyverse")
 library(tidyverse)
 ```
 
-## Step 2: Data Set and Cleanup
-For this assignment we are looking at historical from NYPD. Specifically every shooting incident since 2006. Jurisdiction code is not 0 in only 3954 rows, 54 of which are 1 and 3900 are 2. This data is likely irrelevant to analysis and can be dropped given the minimal variation. Location description is only set in 10004 shootings. This was describing housing types primarily. Since this is roughly half the records, we'll consider the rest as unknowns. Perpetrator age group isn't known in 8295 rows, sex in 8261, and race in 8261. It's easier to identify sex and race than a specific age range, so the slight variation is not concerning. The perpetrator information would only be known on conviction so the high number of empty values is also unconcerning and should just be treated as unknowns. All other data exists in the 23585 rows. The location is replicated 3 times and could be reduced to a single lat/lon pair.
+## Importing and Cleaning Data
+For this assignment we are looking at historical from NYPD. Specifically every shooting incident since 2006. Jurisdiction code is not 0 in only 3954 rows, 54 of which are 1 and 3900 are 2. This data is likely irrelevant to analysis and can be dropped given the minimal variation. Location description is only set in 10004 shootings. This was describing housing types primarily. Since this is roughly half the records, we’ll consider the rest as unknowns. Perpetrator age group isn’t known in 8295 rows, sex in 8261, and race in 8261. It’s easier to identify sex and race than a specific age range, so the slight variation is not concerning. The perpetrator information would only be known on conviction so the high number of empty values is also unconcerning and should just be treated as unknowns. All other data exists in the 23585 rows. The location is replicated 3 times and could be reduced to a single lat/lon pair.
 
 ```{r importData}
 url_in <-"https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
 csv_data <- read.csv(url_in)
 summary(csv_data)
+
 csv_data$OCCUR_DATE <- lubridate::mdy(csv_data$OCCUR_DATE, tz = "EST")
 csv_data$OCCUR_TIME <- hms::hms(lubridate::hms(csv_data$OCCUR_TIME))
 csv_data$STATISTICAL_MURDER_FLAG <- as.logical(csv_data$STATISTICAL_MURDER_FLAG)
 summary(csv_data)
 ```
 
-I'd like to see if shootings are clustered in certain areas and year over year trends in whether there was an increase or decrease in deaths. Particularly if the direction trend was fairly stable across regions or are there outliers that change. I'd then compare those outliers with the areas with clustered shootings to see if there's a correlation. I'd start with the high level view of by boro and then look at it with a more finer grain by precinct. Race would potentially be interesting to look at but this dataset isn't complete enough to do a breakdown by race since only half the shootings have that data.
+I’d like to see if shootings are clustered in certain areas and year over year trends in whether there was an increase or decrease in deaths. Particularly if the direction trend was fairly stable across regions or are there outliers that change. I’d then compare those outliers with the areas with clustered shootings to see if there’s a correlation. I’d start with the high level view of by boro and then look at it with a more finer grain by precinct. Race would potentially be interesting to look at but this data set isn’t complete enough to do a breakdown by race since only half the shootings have that data.
 
-This means I don't need the INCIDENT_KEY for my analysis since it's just a unique identifier. I will need the OCCUR_DATE field but right now just the year. Since we're only looking at 18 years of data we may need more data points so month information should be left in as well. I won't need OCCUR_TIME and can drop that. BORO and PRECINCT as controlled variables for analysis I obviously want to keep in. JURISDICTION_CODE, LOCATION_DESC I can drop. I'd like to keep the STATISTICAL_MURDER_FLAG for now since comparing the two may be interesting and it might help with finding clusters later. PERP_* and VIC_* demographics I obviously don't need as well as the X and Y coordinates, Latitude, Longitude and Lon_Lat because that would have me analyzing too fine grained data if I did. Those locations are likely too specific to tell me anything about how regions trended over time.
+This means I don’t need the INCIDENT_KEY for my analysis since it’s just a unique identifier. I will need the OCCUR_DATE field but right now just the year. Since we’re only looking at 18 years of data we may need more data points so month information should be left in as well. I won’t need OCCUR_TIME and can drop that. BORO and PRECINCT as controlled variables for analysis I obviously want to keep in. JURIS- DICTION_CODE, LOCATION_DESC I can drop. I’d like to keep the STATISTICAL_MURDER_FLAG for now since comparing the two may be interesting and it might help with finding clusters later. PERP_* and VIC_* demographics I obviously don’t need as well as the X and Y coordinates, Latitude, Longitude and Lon_Lat because that would have me analyzing too fine grained data if I did. Those locations are likely too specific to tell me anything about how regions trended over time.
 
 ```{r DropCols, echo=TRUE}
-csv_data <- select(csv_data, -c(INCIDENT_KEY, OCCUR_TIME, JURISDICTION_CODE, LOCATION_DESC, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP, VIC_SEX, VIC_RACE, X_COORD_CD, Y_COORD_CD, Latitude, Longitude, Lon_Lat))
+csv_data <- select(csv_data, -c(INCIDENT_KEY, OCCUR_TIME, JURISDICTION_CODE,
+                                LOCATION_DESC, PERP_AGE_GROUP, PERP_SEX, PERP_RACE,
+                                VIC_AGE_GROUP, VIC_SEX, VIC_RACE, X_COORD_CD, Y_COORD_CD,
+                                Latitude, Longitude, Lon_Lat))
 summary(csv_data)
 ```
 
-Now instead of having OCCUR_DATE be a column, I'd like to make a row for each month and year. For the next step, instead of adding additional columns to my data set, I'm actually going to create four new data frames:
-1. For each Boro/Precinct location, count how many incidents occurred in a month
-1. For each Boro/Precinct location, count how many incidents occurred in a year
-1. For each Boro, count how many incidents occurred in a month
-1. For each Boro, count how many incidents occurred in a year
+Now instead of having OCCUR_DATE be a column, I’d like to make a row for each month and year. For the next step, instead of adding additional columns to my data set, I’m actually going to create four new data frames: 
+
+1. For each Boro/Precinct location, count how many incidents occurred in a month 
+1. For each Boro/Precinct location, count how many incidents occurred in a year 
+1. For each Boro, count how many incidents occurred in a month 
+1. For each Boro, count how many incidents occurred in a year.
 
 ```{r MassageData, echo = TRUE}
-csv_data <- add_column(csv_data, tibble(MONTH = lubridate::month(csv_data$OCCUR_DATE), YEAR = lubridate::year(csv_data$OCCUR_DATE))) %>%select(-c(OCCUR_DATE))
-
-p_monthly_incidents <- tibble(BORO = csv_data$BORO, PRECINCT = csv_data$PRECINCT, DATE = lubridate::make_date(csv_data$YEAR, csv_data$MONTH))
-p_monthly_incidents <- p_monthly_incidents %>% count(BORO, PRECINCT, DATE) %>% rename(INCIDENTS = n)
-
-p_yearly_incidents <- tibble(BORO = csv_data$BORO, PRECINCT = csv_data$PRECINCT, YEAR = csv_data$YEAR)
-p_yearly_incidents <- p_yearly_incidents %>% count(BORO, PRECINCT, YEAR) %>% rename(INCIDENTS = n)
-
-b_monthly_incidents <- tibble(BORO = csv_data$BORO, DATE = lubridate::make_date(csv_data$YEAR, csv_data$MONTH))
+csv_data <- add_column(csv_data, tibble(MONTH = lubridate::month(csv_data$OCCUR_DATE),
+                                        YEAR = lubridate::year(csv_data$OCCUR_DATE))) %>%
+            select(-c(OCCUR_DATE))
+p_monthly_incidents <- tibble(BORO = csv_data$BORO, PRECINCT = csv_data$PRECINCT,
+                              DATE = lubridate::make_date(csv_data$YEAR, csv_data$MONTH))
+p_monthly_incidents <- p_monthly_incidents %>% count(BORO, PRECINCT, DATE) %>%
+                       rename(INCIDENTS = n)
+p_yearly_incidents <- tibble(BORO = csv_data$BORO, PRECINCT = csv_data$PRECINCT,
+                             YEAR = csv_data$YEAR)
+p_yearly_incidents <- p_yearly_incidents %>% count(BORO, PRECINCT, YEAR) %>%
+                      rename(INCIDENTS = n)
+b_monthly_incidents <- tibble(BORO = csv_data$BORO,
+                              DATE = lubridate::make_date(csv_data$YEAR, csv_data$MONTH))
 b_monthly_incidents <- b_monthly_incidents %>% count(BORO, DATE) %>% rename(INCIDENTS = n)
-
 b_yearly_incidents <- tibble(BORO = csv_data$BORO, YEAR = csv_data$YEAR)
 b_yearly_incidents <- b_yearly_incidents %>% count(BORO, YEAR) %>% rename(INCIDENTS = n)
-
-print(p_monthly_incidents, max = 5)
-print(p_yearly_incidents, max = 5)
-print(b_monthly_incidents, max = 4)
-print(b_yearly_incidents, max = 4)
 ```
 
-You can see from the sample lines that it's an easier way view the data instead of adding monthly and yearly columns to the existing data frame for each precinct (and then either add repetitive extra columns for the boro totals in each precinct or have to calculate them every time I need them). This also allows me to preserve the STATISTICAL_MURDER_FLAG in case I do want to use it for analysis in the future.
+Now let’s take a quick look at a few rows to make sure the data makes sense (months have lower counts than years, precincts have lower counts than boros).
 
-## Step 3: Visualizations
-Before getting into charts, I'd like to do some quick summary math that will help with interpreting the graph and set expectations for what I'll see. These will be very quick statistics: mean, median, standard deviation and variance. I want to see them two different ways for each data frame, looking at variance within precinct or boro over time and then across the entire data frame.
-
-```{r graphs, echo = FALSE}
-ggplot(p_monthly_incidents, aes(x=DATE, y=INCIDENTS)) + geom_point(aes(color = factor(PRECINCT))) + labs(title = "Incidents per Precinct by Month")
-
-ggplot(b_monthly_incidents, aes(x=DATE, y=INCIDENTS)) + geom_point(aes(color = factor(BORO))) + labs(title = "Incidents per Boro by Month")
-
-ggplot(p_yearly_incidents, aes(x=YEAR, y = INCIDENTS)) + geom_point(aes(color = factor(PRECINCT))) + labs(title = "Incidents per Precinct by Year")
-
-ggplot(b_yearly_incidents, aes(x=YEAR, y = INCIDENTS)) + geom_point(aes(color = factor(BORO))) + labs(title = "Incidents per Boro by Year")
+```{r CheckData, echo=TRUE}
+print(p_monthly_incidents, n = 5)
+print(p_yearly_incidents, n = 5)
+print(b_monthly_incidents, n = 5)
+print(b_yearly_incidents, n = 5)
 ```
-The immediate impression is looking at incidents per precinct per month is not a good visualization. The data is way too dense to fit on a printed page in a way that the data points are visually distinct, which also means it won't present well. So while this data is useful potentially for analysis, it is not useful for telling the viewer a story because they're just looking at a giant blob of color with 123 data points at each date mark.
 
-Bringing it up a level to look at incidents per boro per month is slightly better. You can see that Brooklyn has more incidents for example, but we haven't taken populations into account yet. The data points in close linear vicinity also significantly overlap so while you can see a general trend over time, you can't see anything useful within a specific year for a trend. Again, I'd mark this data as useful for analysis, but not for visualization. We still need data that's less dense for someone listening to a presentation to look at and get the point.
+You can see from the sample lines that it’s an easier way view the data instead of adding monthly and yearly columns to the existing data frame for each precinct (and then either add repetitive extra columns for the boro totals in each precinct or have to calculate them every time I need them). This also allows me to preserve the STATISTICAL_MURDER_FLAG in case I do want to use it for analysis in the future.
 
-Let's take a look at per year since that will have significantly fewer x-axis points. Per precinct strikes me as a brightly colored bar graph with a few outlier points. Again, the number of variables (123 precincts) is providing too much visual clutter to see useful information. When we look at boro, now we see something useful. For each data point, you can see a distinct mark. The boros are visually separable as are the points in time. This is the kind of graph we would want to use in a presentation to show raw data.
+## Visualizations
+Before getting into charts, I’d like to do some quick summary math that will help with interpreting the graph and set expectations for what I’ll see. These will be very quick statistics: mean, median, standard deviation and variance. I want to see them two different ways for each data frame, looking at variance within precinct or boro over time and then across the entire data set.
 
-There's a few different ways we can add visual information to this graph to add information for the viewer. We could simply draw linear lines between each point so the trend is more visible. A better step could be to find the best fit equation for each boro and show that. On top of that you could add the regression for all of the boros added together and look at how each boro varies from the average regression. The primary reason it doesn't make sense to look at variance against the average right now is we haven't taken population in to account. Brooklyn visually has a significantly higher incident rate, but how does that compare per capita? We would have to go back and find historical population data to make that type of analysis useful. Finding it by year would definitely be possible, by month might be difficult because we're looking at fairly fine grained data. For now, let's just compute the regression line for each boro and add it to the graph to get a better visual comparison of variance in incidents over time.
+Let’s start by looking at each precinct:
 
-```{r plotAnalysis, echo=FALSE}
+```{r statsP, echo = TRUE}
+stats_p_monthly <- aggregate(INCIDENTS ~ PRECINCT, p_monthly_incidents,
+                             function(x) c(M = mean(x), SD = sd(x), VAR = var(x)))
+summary(stats_p_monthly)
+mean(p_monthly_incidents$INCIDENTS)
+sd(p_monthly_incidents$INCIDENTS)
+var(p_monthly_incidents$INCIDENTS)
+
+stats_p_yearly <- aggregate(INCIDENTS ~ PRECINCT, p_yearly_incidents,
+                            function(x) c(M = mean(x), SD = sd(x), VAR = var(x)))
+summary(stats_p_yearly)
+mean(p_yearly_incidents$INCIDENTS)
+sd(p_yearly_incidents$INCIDENTS)
+var(p_yearly_incidents$INCIDENTS)
+```
+
+Looking at the distribution tells us the number of incidents vary significantly by precinct. The yearly data reflects the monthly data as one would expect. Because the magnitude of numbers is larger, it’s easier to see the variation. The mean and median are not that close to each other with the median being lower. This suggests a clumping of precincts with a low number of incidents but several precincts pulling up the mean. The minimal mean being 1 and the maximum rounding to 92 shows a wide variation. The standard deviation and variance also run from very small to very large, also indicating that there are areas of significantly higher incidents. We should see similar results if we look at it by boro, but that may smooth out some of the variation if there’s only a few outliers in a particular boro.
+
+```{r statsB, echo=TRUE}
+stats_b_monthly <- aggregate(INCIDENTS ~ BORO, b_monthly_incidents,
+                             function(x) c(M = mean(x), SD = sd(x), VAR = var(x)))
+summary(stats_b_monthly)
+mean(b_monthly_incidents$INCIDENTS)
+sd(b_monthly_incidents$INCIDENTS)
+var(b_monthly_incidents$INCIDENTS)
+
+stats_b_yearly <- aggregate(INCIDENTS ~ BORO, b_yearly_incidents,
+                            function(x) c(M = mean(x), SD = sd(x), VAR = var(x)))
+summary(stats_b_yearly)
+mean(b_yearly_incidents$INCIDENTS)
+sd(b_yearly_incidents$INCIDENTS)
+var(b_yearly_incidents$INCIDENTS)
+```
+
+The monthly and yearly stats are of higher magnitude as expected since we’re dealing with a larger geo- graphical region. The data does appear to have less variance when comparing boros by both month and year, but there is still a skew toward an outlier with a higher average. Graphs are an excellent way to visually pull out this type of data, so let’s go over our data sets.
+
+```{r plotPM, echo=TRUE}
+ggplot(p_monthly_incidents, aes(x=DATE, y=INCIDENTS)) +
+    geom_point(aes(color = factor(PRECINCT))) +
+    labs(title = "Incidents per Precinct by Month")
+```
+
+The immediate impression is looking at incidents per precinct per month is not a good visualization. The data is way too dense to fit on a printed page in a way that the data points are visually distinct, which also means it won’t present well. So while this data is useful potentially for analysis, it is not useful for telling the viewer a story because they’re just looking at a giant blob of color with 123 data points at each date mark.
+
+```{r plotBM, echo=TRUE}
+ggplot(b_monthly_incidents, aes(x=DATE, y=INCIDENTS)) +
+    geom_point(aes(color = factor(BORO))) +
+    labs(title = "Incidents per Boro by Month")
+```
+
+Bringing it up a level to look at incidents per boro per month is slightly better. You can see that Brooklyn has more incidents for example, but we haven’t taken populations into account yet. The data points in close linear vicinity also significantly overlap so while you can see a general trend over time, you can’t see anything useful within a specific year for a trend. Again, I’d mark this data as useful for analysis, but not for visualization. We still need data that’s less dense for someone listening to a presentation to look at and get the point.
+
+```{r plotPY, echo=TRUE}
+ggplot(p_yearly_incidents, aes(x=YEAR, y = INCIDENTS)) +
+    geom_point(aes(color = factor(PRECINCT))) +
+    labs(title = "Incidents per Precinct by Year")
+```
+
+Let’s take a look at per year since that will have significantly fewer x-axis points. Per precinct strikes me as a brightly colored bar graph with a few outlier points. Again, the number of variables (123 precincts) is providing too much visual clutter to see useful information. When we look at boro, now we see something useful. For each data point, you can see a distinct mark. The boros are visually separable as are the points in time. This is the kind of graph we would want to use in a presentation to show raw data.
+
+```{r plotBY, echo=TRUE}
+ggplot(b_yearly_incidents, aes(x=YEAR, y = INCIDENTS)) +
+    geom_point(aes(color = factor(BORO))) +
+    labs(title = "Incidents per Boro by Year")
+```
+
+There’s a few different ways we can add visual information to this graph to add information for the viewer. We could simply draw linear lines between each point so the trend is more visible. A better step could be to find the best fit equation for each boro and show that. On top of that you could add the regression for all of the boros added together and look at how each boro varies from the average regression. The primary reason it doesn’t make sense to look at variance against the average right now is we haven’t taken population in to account. Brooklyn visually has a significantly higher incident rate, but how does that compare per capita? We would have to go back and find historical population data to make that type of analysis useful. Finding it by year would definitely be possible, by month might be difficult because we’re looking at fairly fine grained data. For now, let’s just compute the regression line for each boro and add it to the graph to get a better visual comparison of variance in incidents over time (the shaded gray area being the error range for each fit line).
+
+```{r plotFit, echo=TRUE}
 options(warn=-1)
 ggplot(b_yearly_incidents, aes(x=YEAR, y = INCIDENTS, color = BORO)) +
     geom_point() + labs(title = "Incidents per Boro by Year") +
-    geom_smooth(method = "lm", formula = y ~ x +poly(x,4))
+    geom_smooth(method = "lm", formula = y ~ x + poly(x,4))
 options(warn=1)
 ```
 
-```{r session, echo=FALSE}
+For our original question, are shootings clustered in a particular area, at this point we can identify Brooklyn as having the most. Like the other boros, it trends up and down over time. If we wanted to narrow it down further, we could filter the data down to just the precincts in Brooklyn to see if any are outliers from the others, but I wouldn’t want to do that yet, given some of the points I’ll discuss on data bias.
+
+## Bias
+We’ve already identified one type of bias in this graph: the population size of each boro isn’t taken into account. While this graph visually says Brooklyn has the most incidents, which you may interpret as the most dangerous place to live, if it had four times as many people as Queens or Manhattan, it would be firmly in the middle if we graphed incidents per capita.
+
+Another source of bias is the lack of location information in the original data set. Most incidents didn’t have an attached location and each boro has a different structure. You would expect a more residential boro with local service oriented businesses (grocery stores, coffee shops, etc.) to have a different profile than a boro that has less residents and more corporate buildings. For example, the metropolitan area I live in, the core metro region has no house and some apartment living in the periphery. You have to get out into the surrounding cities to find residential areas. One would surmise that shooting incidents are more likely to occur in residential type areas than in a building full of actuaries.
+
+Additionally, our data set is missing a large amount of demographic information which can drastically influence outcomes. For example, my husband is an International Association of Arson Investigators Certified Fire Investigator, which is the highest certification one can hold for investigating fires. A number of known factors are directly related to your ability to survive a house fire. Having functioning smoke alarms is by far the highest factor. Many people can’t afford smoke alarms, which is why most fire departments do smoke alarm install campaigns in low income housing. Having a house that isn’t clean raises your risk of dying because there are more things to ignite and may make it more difficult for fire crews to find you. Ease of escape is typically next, influenced by the prior factor of how clean is your how (how easy is it to get to your fire escape point) but also do you have a safe fire escape point. Poverty is a high risk factor because you are likely to use unconventional heating methods or live in non-standard housing like manufactured homes. The same goes for homelessness, where non-standard house like tents and unconventional heating and cooking methods are used. Seeing how this type of demographic information is directly correlated to whether or not you will survive a fire, one can see how the similar information would be correlated to being involved in a shooting incident.
+
+Without population data, demographics, build occupancy types we can’t create a norming factor to directly compare boros. It’s not a deliberate insertion of bias but it does add bias since we can see a clear ordering of highest to least shooting incidents across the boros with the data that we have. But accounting for this other data could drastically change the outcome.
+
+```{r summary, echo=TRUE}
 sessionInfo()
 ```
