@@ -1,0 +1,61 @@
+---
+title: 'Week 5: Final'
+author: "COVID Data Analysis"
+date: "2/27/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+```{r libraries}
+install.packages("tidyverse")
+library(tidyverse)
+library(lubridate)
+url_in <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+file_names <- c("time_series_covid19_confirmed_global.csv",
+                "time_series_covid19_deaths_global.csv",
+                "time_series_covid19_confirmed_US.csv",
+                "time_series_covid19_deaths_US.csv")
+urls <- str_c(url_in, file_names)
+global_cases <- read_csv(urls[1])
+global_deaths <- read_csv(urls[2])
+US_cases <- read_csv(urls[3])
+US_deaths <- read_csv(urls[4])
+global_cases <- global_cases %>% pivot_longer(cols = -c('Province/State', 'Country/Region', Lat, Long), names_to = "date", values_to = "cases") %>% select(-c(Lat,Long))
+global_deaths <- global_deaths %>% pivot_longer(cols = -c('Province/State', 'Country/Region', Lat, Long), names_to = "date", values_to = "deaths") %>% select(-c(Lat,Long))
+global <- global_cases %>% full_join(global_deaths) %>% rename(Country_Region = 'Country/Region', Province_State = 'Province/State') %>% mutate(date = mdy(date))
+summary(global)
+global <- global %>% filter(cases > 0)
+summary(global)
+US_cases <- US_cases %>% pivot_longer(cols = -(UID:Combined_Key), names_to = "date", values_to = "cases") %>% select(Admin2:cases) %>% mutate(date = mdy(date)) %>% select(-c(Lat, Long_))
+US_deaths <- US_deaths %>% pivot_longer(cols = -(UID:Population), names_to = "date", values_to = "deaths") %>% select(Admin2:deaths) %>% mutate(date = mdy(date)) %>% select(-c(Lat, Long_))
+US <- US_cases %>% full_join(US_deaths)
+summary(US)
+global <- global %>% unite("Combined_Key", c(Province_State, Country_Region), sep = ", ", na.rm = TRUE, remove = FALSE)
+uid_lookup_url <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/UID_ISO_FIPS_LookUp_Table.csv"
+uid <- read_csv(uid_lookup_url) %>% select(-c(Lat, Long_, Combined_Key, code3, iso2, iso3, Admin2))
+global <- global %>% left_join(uid, by = c("Province_State", "Country_Region")) %>% select(-c(UID, FIPS)) %>% select(Province_State, Country_Region, date, cases, deaths, Population, Combined_Key)
+```
+
+Import, tidy and analyze the COVID19 dataset from the Johns Hopkins github site. This is the same dataset I used in class. Feel free to repeat and reuse what I did if you want to. Be sure your project is reproducible and contains some visualization and analysis that is unique to your project. You may use the data to do any analysis that is of interest to you. You should include at least two visualizations and one model.  Be sure to identify any bias possible in the data and in your analysis.
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
